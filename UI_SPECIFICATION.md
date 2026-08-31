@@ -1,96 +1,96 @@
-# div.DICOM — Käyttöliittymän Toiminnallisuus- ja Vuorovaikutusspesifikaatio (UI Specification)
+# div.DICOM — UI Functionality and Interaction Specification (UI Specification)
 
-Tämä dokumentti määrittelee tarkasti div.DICOM -katselimen käyttöliittymän sovittujen toiminnallisuuksien käyttäytymismallit, säännöt ja rajapinnat. Dokumentin tavoitteena on varmistaa, että sovelluksen toiminnallisuudet eivät unohdu tai rikkoudu tulevien kehitys- ja refaktorointivaiheiden aikana.
-
----
-
-## 1. Viewportien Ikkunajako & Layout Tree
-
-### 1.1 Jakorajat ja mittasuhteet
-- **Maksimirajat**: Katselin sallii korkeintaan **6 vierekkäistä saraketta** (horisontaalisesti) ja korkeintaan **4 päällekkäistä riviä** (vertikaalisesti). Rajat tarkistetaan apufunktioilla `canSplitNode` ja `getLayoutDimensions`.
-- **Indeksien allokointi**: Sisäkkäisissä jaoissa (nested split) uuden viewportin indeksi lasketaan koko layout-puun tasolta (`getNextAvailableViewportIndex`), mikä takaa uniikit indeksit ja estää ruutujen sekoittumisen.
-
-### 1.2 Jakolinjojen vuorovaikutus ja muistaminen (Panel Sizes)
-- **Kiinteä leveys ilman heilahtelua**: Jakolinjoilla (`PanelResizeHandle`) on vakioleveys (`w-1` / `h-1`), eikä palkki paksuunnu hiiren ollessa sen päällä (`hover`). Tämä estää viereisten kuvien tärähtelyn ja hyppimisen (*layout jitter*).
-- **Värikorostus & osuma-alue**: Hiiren osuessa jakolinjalle palkki korostuu siniseksi (`#3584F5`). Tarttumisen helpottamiseksi linjalla on laajennettu näkymätön osuma-alue (`before:absolute before:-inset-x-2` / `before:-inset-y-2`) tasolla `z-40`.
-- **Tapahtumien eristys**: Jakolinja pysäyttää hiiritapahtumat (`e.stopPropagation()`), ja viewportin kanvaasi ohittaa jakolinjalle osuvat klikkaukset. Jakolinjan siirto ei koskaan muuta kuvan ikkunointia (WW/WL) tai zoomausta.
-- **Jakolinjojen muisti focus-tilassa**: Käyttäjän siirtämät jakolinjojen suhteet tallennetaan muistiin (`panelSizesMap`) `PanelSizes`-rakenteena (`{ size0: number, size1: number }`) ja asetetaan `PanelGroup`-komponentille `defaultLayout`-parametrilla. Kun ruutu avataan focus-tilaan ja palataan takaisin, jakolinjat säilyvät täsmälleen asetetuissa kohdissa.
+This document strictly defines the behavioral models, rules, and interfaces of the agreed-upon UI functionalities for the div.DICOM viewer. The goal of this document is to ensure that application functionalities are not forgotten or broken during future development and refactoring phases.
 
 ---
 
-## 2. Monivalinta (Ctrl+Click) ja Nopea Linkitys (Fast Linking)
+## 1. Viewport Window Splitting & Layout Tree
 
-### 2.1 Viewportien valinta
-- **Valinta**: Pitämällä `Ctrl` (tai Macilla `Cmd`) pohjassa ja klikkaamalla viewportteja käyttäjä voi valita 1–4 ruutua missä tahansa järjestyksessä.
-- **Visuaalinen palaute**: Valitut ruudut korostuvat sinisellä hehkuvalla kehyksellä (`ring-2 ring-[#3584F5]`) ja saavat vasempaan yläkulmaan valintajärjestyksen mukaisen numeromerkin (**#1**, **#2**, **#3**, **#4**). Kun vähintään kaksi ruutua on valittuna, merkissä lukee myös **Linked**.
-- **Poistaminen**: Ruudun klikkaaminen uudelleen `Ctrl` pohjassa poistaa sen valinnan.
+### 1.1 Split limits and dimensions
+- **Maximum limits**: The viewer allows a maximum of **6 adjacent columns** (horizontally) and a maximum of **4 stacked rows** (vertically). The limits are checked using the utility functions `canSplitNode` and `getLayoutDimensions`.
+- **Index allocation**: In nested splits, the new viewport index is calculated from the root of the layout tree (`getNextAvailableViewportIndex`), which guarantees unique indices and prevents viewport mixing.
 
-### 2.2 Nopea linkitys (Fast Linking / Syncing)
-- Kun 2–4 ruutua on valittuna, toiminnot linkittyvät automaattisesti reaaliajassa:
-  - **Zoom**: Yhdessä valitussa ruudussa tehty zoomaus skaalaa samassa suhteessa kaikki linkitetyt ruudut samanaikaisesti.
-  - **Pan**: Yhdessä ruudussa tehty siirtäminen siirtää kaikkia linkitettyjä ruutuja.
-  - **WW/WL**: Ikkunointitason ja -leveyden säätö säätää kaikkia linkitettyjä ruutuja ja päivittää niiden HUD-arvot reaaliajassa.
-
-### 2.3 Monivalinnan nollaus
-- **Ctrl-napautus**: Pelkkä `Ctrl`-näppäimen painaminen alas ja ylös (ilman hiiriklikkausta) nollaa kaikki valinnat ja linkityksen välittömästi.
-- **Esc-näppäin**: Painamalla `Escape` monivalinta ja linkitys tyhjennetään.
+### 1.2 Split line interaction and memory (Panel Sizes)
+- **Fixed width without jitter**: Split lines (`PanelResizeHandle`) have a constant width (`w-1` / `h-1`), and the bar does not thicken when hovered. This prevents adjacent images from shaking or jumping (*layout jitter*).
+- **Color highlight & hit area**: When hovered, the split line is highlighted in blue (`#3584F5`). To make grabbing easier, the line has an expanded invisible hit area (`before:absolute before:-inset-x-2` / `before:-inset-y-2`) at z-index `z-40`.
+- **Event isolation**: The split line stops mouse events (`e.stopPropagation()`), and the viewport canvas ignores clicks that land on the split line. Moving a split line never alters the image windowing (WW/WL) or zoom.
+- **Split line memory in focus mode**: The split ratios moved by the user are saved in memory (`panelSizesMap`) as a `PanelSizes` structure (`{ size0: number, size1: number }`) and applied to the `PanelGroup` component via the `defaultLayout` parameter. When a viewport is opened in focus mode and returned to normal, the split lines remain exactly where they were set.
 
 ---
 
-## 3. Nopea Ikkunointi (Quick Layout)
+## 2. Multi-Selection (Ctrl+Click) and Fast Linking
 
-- **Aktivointi**: Kun 1–4 ruutua on valittuna, yläpalkin **Grid Layout** -painike muuttuu siniseksi sykkiväksi toimintopainikkeeksi laskurilla.
-- **Suoritus**: Painamalla **`Enter`** tai klikkaamalla sinistä Grid Layout -nappia (joka ei tällöin avaa valikkoa) valitut sarjat avataan välittömästi puhtaaseen ikkunajakoon numerojärjestyksessä:
-  - **1 ruutu valittu**: 1x1 Single
-  - **2 ruutua valittu**: 1x2 Columns (#1 vasen, #2 oikea)
-  - **3 ruutua valittu**: 1x3 Columns (#1 vasen, #2 keski, #3 oikea)
-  - **4 ruutua valittu**: 2x2 Grid (#1 vasen ylä, #2 oikea ylä, #3 vasen ala, #4 oikea ala)
-- **Ikkunoinnin ja zoomauksen siirtyminen**: `handleQuickLayout` siirtää kunkin sarjan omat ikkunointiarvot (`windowCenter`, `windowWidth`), suhteellisen zoomauksen (`zoomRatio`) ja siirtymän suoraan uuteen kohderuutuun (`srcIdx -> targetIdx`), jotta kuvan kontrasti tai suurennus ei muutu tai ylivalotu.
+### 2.1 Viewport selection
+- **Selection**: By holding down `Ctrl` (or `Cmd` on Mac) and clicking viewports, the user can select 1–4 viewports in any order.
+- **Visual feedback**: Selected viewports are highlighted with a glowing blue border (`ring-2 ring-[#3584F5]`) and receive a number badge in the top-left corner corresponding to the selection order (**#1**, **#2**, **#3**, **#4**). When at least two viewports are selected, the badge also says **Linked**.
+- **Deselection**: Clicking the viewport again while holding `Ctrl` removes its selection.
+
+### 2.2 Fast linking (Fast Linking / Syncing)
+- When 2–4 viewports are selected, operations are automatically linked in real-time:
+  - **Zoom**: Zooming in one selected viewport proportionally scales all linked viewports simultaneously.
+  - **Pan**: Panning in one viewport pans all linked viewports.
+  - **WW/WL**: Adjusting the window level and width adjusts all linked viewports and updates their HUD values in real-time.
+
+### 2.3 Selection reset
+- **Ctrl-tap**: Simply pressing and releasing the `Ctrl` key (without a mouse click) instantly resets all selections and linking.
+- **Esc key**: Pressing `Escape` clears the multi-selection and linking.
 
 ---
 
-## 4. Focus-tila (Maximize) & Suhteellinen Skaalaus
+## 3. Quick Layout
 
-### 4.1 Focus-tilaan siirtyminen ja poistuminen
-- **Tuplaklikkaus**: Viewportin tuplaklikkaus (tai kelluvan toimintopalkin Maximize-painike) suurentaa ruudun koko näytön 1x1 focus-tilaan. Uusi tuplaklikkaus (tai Restore-painike) palauttaa moniruutunäkymän.
-- **Action Bar focus-tilassa**: Focus-tilassa kelluvassa toimintopalkissa näytetään **vain yksi palautuskuvake** (`Minimize2`), jotta käyttäjä ei sekoita focus-tilaa pysyvään 1x1-jakoon.
+- **Activation**: When 1–4 viewports are selected, the **Grid Layout** button in the top bar turns into a pulsing blue action button with a counter.
+- **Execution**: Pressing **`Enter`** or clicking the blue Grid Layout button (which in this state does not open a menu) instantly opens the selected series in a clean split layout in numerical order:
+  - **1 viewport selected**: 1x1 Single
+  - **2 viewports selected**: 1x2 Columns (#1 left, #2 right)
+  - **3 viewports selected**: 1x3 Columns (#1 left, #2 center, #3 right)
+  - **4 viewports selected**: 2x2 Grid (#1 top-left, #2 top-right, #3 bottom-left, #4 bottom-right)
+- **Windowing and zoom transfer**: `handleQuickLayout` directly transfers each series' own windowing values (`windowCenter`, `windowWidth`), relative zoom (`zoomRatio`), and pan to the new target viewport (`srcIdx -> targetIdx`) so that image contrast or magnification does not change or overexpose.
 
-### 4.2 Suhteellinen skaalaus (`zoomRatio = scale / fitScale`)
-- Kuvan zoomaus lasketaan aina suhteessa kunkin näkymän omaan ikkunan kokoon:
-  - Jos kuva on 2x2-ruudussa perussovituksessa (100%), se täyttää 1x1 focus-tilassa koko näytön (100% sovitus koko näytölle).
-  - Jos kuvaa on zoomattu leesiioon (esim. 200%), se aukeaa 1x1 focus-tilaan 200% suurennettuna suhteessa koko näytön alaan samaan kohteeseen kohdistettuna.
-  - Palattaessa takaisin moniruutunäkymään kuva palaa suhteelliseen 200% suurennokseensa pienessä ruudussa.
+---
+
+## 4. Focus Mode (Maximize) & Relative Scaling
+
+### 4.1 Entering and exiting focus mode
+- **Double-click**: Double-clicking a viewport (or using the Maximize button on the floating action bar) enlarges the viewport to a full-screen 1x1 focus mode. Another double-click (or the Restore button) returns to the multi-viewport view.
+- **Action Bar in focus mode**: In focus mode, the floating action bar shows **only one restore icon** (`Minimize2`) so the user does not confuse focus mode with a permanent 1x1 layout.
+
+### 4.2 Relative scaling (`zoomRatio = scale / fitScale`)
+- Image zoom is always calculated relative to each view's own window size:
+  - If an image is in a 2x2 viewport at base fit (100%), it will fill the full screen in 1x1 focus mode (100% fit for the full screen).
+  - If an image is zoomed in on a lesion (e.g., 200%), it opens in 1x1 focus mode at 200% magnification relative to the full screen area, centered on the same target.
+  - When returning to the multi-viewport view, the image reverts to its relative 200% magnification in the small viewport.
 
 ### 4.3 Reset Layout
-- Poistuu välittömästi focus-tilasta takaisin alkuperäiseen Hanging Protocol -asetteluun.
-- Nollaa kaikkien ruutujen zoomaukset ja siirtymät takaisin 100% perussovitukseen (`fitToWindow`).
-- Palauttaa jakolinjojen suhteet tasajakoon.
-- Tyhjentää monivalinnat.
+- Instantly exits focus mode back to the original Hanging Protocol layout.
+- Resets the zooms and pans of all viewports back to 100% base fit (`fitToWindow`).
+- Restores split line ratios to an even split.
+- Clears multi-selections.
 
 ---
 
-## 5. Kuvasarjojen Raahaus & Natiivi DICOM LUT/VOI
+## 5. Series Dragging & Native DICOM LUT/VOI
 
-- **Raahauksen korostus**: Kun sarjaa raahataan Files-paneelista viewportin päälle, aktiivinen kohderuutu korostuu sinisellä kehyksellä ja opasteella (*"Drop Series into Viewport X"*).
-- **Natiivin LUT/VOI:n palautus**: Kun sarja pudotetaan tai ladataan viewporttiin:
-  - Ruudussa aiemmin olleen sarjan ikkunointi-, kontrasti-, rotaatio- ja zoomausasetukset unohdetaan täysin.
-  - Uudelle sarjalle kutsutaan `cornerstone.getDefaultViewportForImage(element, image)`, joka ottaa käyttöön suoraan kyseisen sarjan omat `windowCenter`-, `windowWidth`- ja `voiLUT`-arvot.
-  - Kuva sovitetaan automaattisesti kyseisen ruudun kokoon (`fitToWindow`).
+- **Drag highlight**: When dragging a series from the Files panel over a viewport, the active target viewport is highlighted with a blue border and a prompt (*"Drop Series into Viewport X"*).
+- **Native LUT/VOI restore**: When a series is dropped or loaded into a viewport:
+  - The windowing, contrast, rotation, and zoom settings of the series previously in that viewport are completely forgotten.
+  - `cornerstone.getDefaultViewportForImage(element, image)` is called for the new series, directly applying that specific series' own `windowCenter`, `windowWidth`, and `voiLUT` values.
+  - The image is automatically fitted to the size of that viewport (`fitToWindow`).
 
 ---
 
-## 6. Hiirieleet, Työkalut & Mittaukset
+## 6. Mouse Gestures, Tools & Measurements
 
-### 6.1 Oletustyökalu käynnistyessä
-- Sovelluksen käynnistyessä aktiivisena työkaluna on **`none`** (ei lukittua työkalua).
+### 6.1 Default tool on startup
+- On application startup, the active tool is **`none`** (no locked tool).
 
-### 6.2 Suorat hiirieleet
-- **Oikea painike pohjassa**: WW/WL -ikkunoinnin säätö.
-- **Keskimmäinen painike (tai rulla) pohjassa**: Pan / kuvan siirto.
-- **Oikea + Vasen painike samanaikaisesti (`buttons === 3`)**: Zoomaus (*Chord Zoom*). Ele lukittuu zoom-tilaan (`isChordZooming`), jolloin ikkunointi (WW/WL) ei muutu missään vaiheessa eletapahtumaa tai painikkeita vapautettaessa.
+### 6.2 Direct mouse gestures
+- **Right button held**: WW/WL windowing adjustment.
+- **Middle button (or scroll wheel) held**: Pan / image translation.
+- **Right + Left button simultaneously (`buttons === 3`)**: Zoom (*Chord Zoom*). The gesture locks into zoom mode (`isChordZooming`), meaning windowing (WW/WL) will not change at any point during the gesture event or when buttons are released.
 
-### 6.3 Mittaustyökalut
-- **Automaattinen sulkeutuminen**: Length-, Angle- ja ROI -työkalut kytkeytyvät automaattisesti pois päältä (`setActiveTool('none')`), kun mittauksen piirtäminen valmistuu.
-- **ROI-monikulmion sulkeminen**: ROI sulkeutuu, kun loppupiste viedään alkupisteen päälle tai tuplaklikataan kanvaasia.
-- **Roskakoriin poisto**: Mittauksen (ROI, Length, Angle) raahaaminen kelluvan punaisen roskakorin päälle poistaa mittauksen siististi.
-- **Valikoiden automaattisulkeutuminen**: Mittauslista- ja Layout-valikot sulkeutuvat automaattisesti, kun klikataan viewportia tai valitaan toinen työkalu.
+### 6.3 Measurement tools
+- **Auto-close**: The Length, Angle, and ROI tools automatically turn off (`setActiveTool('none')`) when drawing the measurement is completed.
+- **ROI polygon close**: The ROI closes when the end point is placed over the start point or by double-clicking the canvas.
+- **Trash removal**: Dragging a measurement (ROI, Length, Angle) over the floating red trash can cleanly deletes the measurement.
+- **Menu auto-close**: The Measurement List and Layout menus automatically close when a viewport is clicked or another tool is selected.
