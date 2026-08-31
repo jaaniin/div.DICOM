@@ -1,26 +1,81 @@
-export const dot = (a: number[], b: number[]) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-export const cross = (a: number[], b: number[]) => [
-  a[1]*b[2] - a[2]*b[1],
-  a[2]*b[0] - a[0]*b[2],
-  a[0]*b[1] - a[1]*b[0]
-];
-export const sub = (a: number[], b: number[]) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
-export const add = (a: number[], b: number[]) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
-export const mul = (a: number[], s: number) => [a[0]*s, a[1]*s, a[2]*s];
+/**
+ * 3D DICOM Geometry & Coordinate Math Utilities
+ */
 
-export const getDominantAxis = (vector: number[]) => {
+export type Vector3 = [number, number, number];
+
+export interface OrientationMarkers {
+  top: string;
+  bottom: string;
+  left: string;
+  right: string;
+}
+
+export interface ImagePlaneMetadata {
+  imagePositionPatient?: number[] | null;
+  imageOrientationPatient?: number[] | null;
+  pixelSpacing?: number[] | null;
+  sliceLocation?: number | null;
+  rows?: number | null;
+  columns?: number | null;
+}
+
+export const dot = (a: Vector3 | number[], b: Vector3 | number[]): number => {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+};
+
+export const cross = (a: Vector3 | number[], b: Vector3 | number[]): Vector3 => {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+};
+
+export const sub = (a: Vector3 | number[], b: Vector3 | number[]): Vector3 => {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+};
+
+export const add = (a: Vector3 | number[], b: Vector3 | number[]): Vector3 => {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+};
+
+export const mul = (a: Vector3 | number[], s: number): Vector3 => {
+  return [a[0] * s, a[1] * s, a[2] * s];
+};
+
+export const norm = (a: Vector3 | number[]): number => {
+  return Math.sqrt(dot(a, a));
+};
+
+export const normalize = (a: Vector3 | number[]): Vector3 => {
+  const n = norm(a);
+  if (n === 0) return [0, 0, 0];
+  return [a[0] / n, a[1] / n, a[2] / n];
+};
+
+export const getNormal = (iop: number[]): Vector3 => {
+  const rowVector: Vector3 = [iop[0], iop[1], iop[2]];
+  const colVector: Vector3 = [iop[3], iop[4], iop[5]];
+  return normalize(cross(rowVector, colVector));
+};
+
+export const getDominantAxis = (vector: number[]): string => {
   const absX = Math.abs(vector[0]);
   const absY = Math.abs(vector[1]);
   const absZ = Math.abs(vector[2]);
-  const max = Math.max(absX, absY, absZ);
 
-  if (max === absX) return vector[0] > 0 ? 'L' : 'R';
-  if (max === absY) return vector[1] > 0 ? 'P' : 'A';
-  return vector[2] > 0 ? 'H' : 'F';
+  if (absX > absY && absX > absZ) {
+    return vector[0] > 0 ? 'L' : 'R';
+  } else if (absY > absX && absY > absZ) {
+    return vector[1] > 0 ? 'P' : 'A';
+  } else {
+    return vector[2] > 0 ? 'H' : 'F';
+  }
 };
 
-export const getOppositeAxis = (axis: string) => {
-  switch(axis) {
+export const getOppositeAxis = (axis: string): string => {
+  switch (axis) {
     case 'L': return 'R';
     case 'R': return 'L';
     case 'A': return 'P';
@@ -31,100 +86,273 @@ export const getOppositeAxis = (axis: string) => {
   }
 };
 
-export const getOrientationMarkers = (iop: number[] | null) => {
-  if (!iop || iop.length < 6) return { top: '', bottom: '', left: '', right: '' };
+export const getOrientationMarkers = (iop: number[] | null | undefined): OrientationMarkers => {
+  if (!iop || iop.length < 6) return { top: '', bottom: '', left: '', right: '', };
 
   const rowVector = iop.slice(0, 3);
   const colVector = iop.slice(3, 6);
 
-  const rightLabel = getDominantAxis(rowVector);
-  const leftLabel = getOppositeAxis(rightLabel);
+  const right = getDominantAxis(rowVector);
+  const left = getOppositeAxis(right);
+  const bottom = getDominantAxis(colVector);
+  const top = getOppositeAxis(bottom);
 
-  const bottomLabel = getDominantAxis(colVector);
-  const topLabel = getOppositeAxis(bottomLabel);
-
-  return { top: topLabel, bottom: bottomLabel, left: leftLabel, right: rightLabel };
+  return { top, bottom, left, right, };
 };
 
-export const calculateIntersection = (metaA: any, metaB: any) => {
-  const ippA = metaA.imagePositionPatient;
+export const calculateIntersection = (
+  metaA: ImagePlaneMetadata,
+  metaB: ImagePlaneMetadata
+): [{ x: number; y: number }, { x: number; y: number }] | null => {
+  if (
+    !metaA.imagePositionPatient ||
+    !metaA.imageOrientationPatient ||
+    !metaB.imagePositionPatient ||
+    !metaB.imageOrientationPatient ||
+    !metaB.pixelSpacing ||
+    !metaB.rows ||
+    !metaB.columns
+  ) {
+    return null;
+  }
+
   const iopA = metaA.imageOrientationPatient;
-  const psA = metaA.pixelSpacing || [1, 1];
-  
-  const ippB = metaB.imagePositionPatient;
   const iopB = metaB.imageOrientationPatient;
-  const psB = metaB.pixelSpacing || [1, 1];
+  const ippA: Vector3 = [metaA.imagePositionPatient[0], metaA.imagePositionPatient[1], metaA.imagePositionPatient[2]];
+  const ippB: Vector3 = [metaB.imagePositionPatient[0], metaB.imagePositionPatient[1], metaB.imagePositionPatient[2]];
 
-  if (!ippA || !iopA || !ippB || !iopB || !metaA.rows || !metaA.columns) return null;
+  const normalA = getNormal(iopA);
+  const normalB = getNormal(iopB);
 
-  const OA = ippA;
-  const RA = iopA.slice(0, 3);
-  const CA = iopA.slice(3, 6);
-  const NA = cross(RA, CA);
+  const lineDir = cross(normalA, normalB);
+  if (norm(lineDir) < 1e-4) {
+    return null; // Parallel planes
+  }
 
-  const OB = ippB;
-  const RB = iopB.slice(0, 3);
-  const CB = iopB.slice(3, 6);
-  const NB = cross(RB, CB);
+  const rowB: Vector3 = [iopB[0], iopB[1], iopB[2]];
+  const colB: Vector3 = [iopB[3], iopB[4], iopB[5]];
 
-  // Are they parallel?
-  const dir = cross(NA, NB);
-  if (Math.abs(dir[0]) < 1e-5 && Math.abs(dir[1]) < 1e-5 && Math.abs(dir[2]) < 1e-5) return null;
+  const cornersA: Vector3[] = [
+    ippA,
+    add(ippA, mul(iopA.slice(0, 3) as Vector3, (metaA.columns || 1) * (metaA.pixelSpacing?.[1] || 1))),
+    add(ippA, mul(iopA.slice(3, 6) as Vector3, (metaA.rows || 1) * (metaA.pixelSpacing?.[0] || 1))),
+    add(
+      add(ippA, mul(iopA.slice(0, 3) as Vector3, (metaA.columns || 1) * (metaA.pixelSpacing?.[1] || 1))),
+      mul(iopA.slice(3, 6) as Vector3, (metaA.rows || 1) * (metaA.pixelSpacing?.[0] || 1))
+    ),
+  ];
 
-  const wA = metaA.columns * psA[1];
-  const hA = metaA.rows * psA[0];
+  const edgesA = [
+    [cornersA[0], cornersA[1]],
+    [cornersA[1], cornersA[3]],
+    [cornersA[3], cornersA[2]],
+    [cornersA[2], cornersA[0]],
+  ];
 
-  const TL = OA;
-  const TR = add(OA, mul(RA, wA));
-  const BL = add(OA, mul(CA, hA));
-  const BR = add(TR, mul(CA, hA));
+  const intersectPoints: Vector3[] = [];
+  const planeD_B = -dot(normalB, ippB);
 
-  const edges = [[TL, TR], [TR, BR], [BR, BL], [BL, TL]];
-  const intersectionPoints: {x: number, y: number}[] = [];
+  for (const [p1, p2] of edgesA) {
+    const d1 = dot(normalB, p1) + planeD_B;
+    const d2 = dot(normalB, p2) + planeD_B;
 
-  for (const [P1, P2] of edges) {
-    const d1 = dot(NB, sub(P1, OB));
-    const d2 = dot(NB, sub(P2, OB));
-
-    if (d1 * d2 <= 0 && (d1 !== 0 || d2 !== 0)) {
+    if (Math.abs(d1 - d2) > 1e-6 && ((d1 <= 0 && d2 >= 0) || (d1 >= 0 && d2 <= 0))) {
       const t = d1 / (d1 - d2);
-      const X = add(P1, mul(sub(P2, P1), t));
-
-      const X_OB = sub(X, OB);
-      const x = dot(X_OB, RB) / psB[1];
-      const y = dot(X_OB, CB) / psB[0];
-      
-      intersectionPoints.push({ x, y });
+      const pt = add(p1, mul(sub(p2, p1), t));
+      intersectPoints.push(pt);
     }
   }
 
-  const uniquePts: {x: number, y: number}[] = [];
-  for (const pt of intersectionPoints) {
-    if (!uniquePts.some(p => Math.abs(p.x - pt.x) < 0.1 && Math.abs(p.y - pt.y) < 0.1)) {
-      uniquePts.push(pt);
+  if (intersectPoints.length < 2) return null;
+
+  const [pt1, pt2] = intersectPoints;
+  const projectToPixel = (pt: Vector3): { x: number; y: number } => {
+    const diff = sub(pt, ippB);
+    const xMm = dot(diff, rowB);
+    const yMm = dot(diff, colB);
+    return {
+      x: xMm / metaB.pixelSpacing![1],
+      y: yMm / metaB.pixelSpacing![0],
+    };
+  };
+
+  return [projectToPixel(pt1), projectToPixel(pt2)];
+};
+
+/**
+ * Sorts DICOM instances in a series according to patient anatomical coordinates
+ * by computing the scalar projection along the slice normal vector.
+ * Essential for interleaved MRI acquisitions and multi-slice stacks.
+ */
+export const sortInstancesAnatomically = <
+  T extends { metadata: ImagePlaneMetadata & { instanceNumber?: number; sliceLocation?: number | string | null } }
+>(
+  instances: T[]
+): T[] => {
+  if (instances.length <= 1) return [...instances];
+
+  // Find a reference instance with valid orientation
+  const refInstance = instances.find(
+    (inst) =>
+      inst.metadata?.imageOrientationPatient &&
+      inst.metadata.imageOrientationPatient.length >= 6 &&
+      !isNaN(inst.metadata.imageOrientationPatient[0])
+  );
+
+  if (!refInstance || !refInstance.metadata.imageOrientationPatient) {
+    // Check if sliceLocation is available across instances
+    const hasSliceLocation = instances.some(
+      (inst) => inst.metadata.sliceLocation !== undefined && inst.metadata.sliceLocation !== null && !isNaN(Number(inst.metadata.sliceLocation))
+    );
+
+    if (hasSliceLocation) {
+      return [...instances].sort((a, b) => {
+        const locA = Number(a.metadata.sliceLocation ?? 0);
+        const locB = Number(b.metadata.sliceLocation ?? 0);
+        if (locA !== locB) return locA - locB;
+        return (a.metadata.instanceNumber ?? 0) - (b.metadata.instanceNumber ?? 0);
+      });
+    }
+
+    // Fallback to instanceNumber
+    return [...instances].sort((a, b) => {
+      const numA = a.metadata.instanceNumber ?? 0;
+      const numB = b.metadata.instanceNumber ?? 0;
+      return numA - numB;
+    });
+  }
+
+  const normal = getNormal(refInstance.metadata.imageOrientationPatient);
+
+  return [...instances].sort((a, b) => {
+    const posA = a.metadata.imagePositionPatient;
+    const posB = b.metadata.imagePositionPatient;
+
+    if (
+      posA &&
+      posB &&
+      posA.length >= 3 &&
+      posB.length >= 3 &&
+      !isNaN(posA[0]) &&
+      !isNaN(posA[1]) &&
+      !isNaN(posA[2]) &&
+      !isNaN(posB[0]) &&
+      !isNaN(posB[1]) &&
+      !isNaN(posB[2])
+    ) {
+      const projA = dot([posA[0], posA[1], posA[2]], normal);
+      const projB = dot([posB[0], posB[1], posB[2]], normal);
+      const diff = projA - projB;
+      if (Math.abs(diff) > 1e-4) {
+        return diff;
+      }
+    }
+
+    // Fallback to sliceLocation
+    if (a.metadata.sliceLocation !== undefined && a.metadata.sliceLocation !== null &&
+        b.metadata.sliceLocation !== undefined && b.metadata.sliceLocation !== null) {
+      const locA = Number(a.metadata.sliceLocation);
+      const locB = Number(b.metadata.sliceLocation);
+      if (!isNaN(locA) && !isNaN(locB) && Math.abs(locA - locB) > 1e-4) {
+        return locA - locB;
+      }
+    }
+
+    // Secondary fallback to instanceNumber for duplicate/multi-phase positions
+    const numA = a.metadata.instanceNumber ?? 0;
+    const numB = b.metadata.instanceNumber ?? 0;
+    return numA - numB;
+  });
+};
+
+
+/**
+ * Computes the formatted slice location string (e.g. "Loc: R 15.5 mm", "Loc: H 42.0 mm", "Loc: P 8.2 mm")
+ * based on the slice center in Patient Reference Coordinates (RCS) along the dominant slice normal axis (RL, HF, AP).
+ */
+export const getFormattedSliceLocation = (
+  meta?: ImagePlaneMetadata | null
+): string | null => {
+  if (!meta) return null;
+
+  const ipp = meta.imagePositionPatient;
+  const iop = meta.imageOrientationPatient;
+
+  // 1. If full 3D patient geometry is available
+  if (ipp && ipp.length >= 3 && !isNaN(ipp[0]) && !isNaN(ipp[1]) && !isNaN(ipp[2])) {
+    let center: Vector3 = [ipp[0], ipp[1], ipp[2]];
+
+    // If orientation, pixel spacing and FOV dimensions are present, calculate exact slice center
+    if (
+      iop &&
+      iop.length >= 6 &&
+      !isNaN(iop[0]) &&
+      meta.rows &&
+      meta.columns &&
+      meta.pixelSpacing &&
+      meta.pixelSpacing.length >= 2
+    ) {
+      const rowVec: Vector3 = [iop[0], iop[1], iop[2]];
+      const colVec: Vector3 = [iop[3], iop[4], iop[5]];
+      const dx = meta.pixelSpacing[1];
+      const dy = meta.pixelSpacing[0];
+      const halfWidth = ((meta.columns - 1) * dx) / 2;
+      const halfHeight = ((meta.rows - 1) * dy) / 2;
+
+      center = add(add(center, mul(rowVec, halfWidth)), mul(colVec, halfHeight));
+    }
+
+    if (iop && iop.length >= 6 && !isNaN(iop[0])) {
+      const normal = getNormal(iop);
+      const absX = Math.abs(normal[0]);
+      const absY = Math.abs(normal[1]);
+      const absZ = Math.abs(normal[2]);
+
+      let dir = '';
+      let val = 0;
+
+      if (absX > absY && absX > absZ) {
+        // Sagittal plane: X-axis (R - L)
+        // In DICOM RCS: +X is Left (L), -X is Right (R)
+        val = center[0];
+        if (Math.abs(val) >= 0.05) {
+          dir = val > 0 ? 'L' : 'R';
+        }
+      } else if (absY > absX && absY > absZ) {
+        // Coronal plane: Y-axis (A - P)
+        // In DICOM RCS: +Y is Posterior (P), -Y is Anterior (A)
+        val = center[1];
+        if (Math.abs(val) >= 0.05) {
+          dir = val > 0 ? 'P' : 'A';
+        }
+      } else {
+        // Axial plane: Z-axis (H - F)
+        // In DICOM RCS: +Z is Head/Superior (H), -Z is Feet/Inferior (F)
+        val = center[2];
+        if (Math.abs(val) >= 0.05) {
+          dir = val > 0 ? 'H' : 'F';
+        }
+      }
+
+      const distStr = Math.abs(val).toFixed(1);
+      return dir ? `Loc: ${dir} ${distStr} mm` : `Loc: ${distStr} mm`;
     }
   }
 
-  if (uniquePts.length >= 2) {
-    return [uniquePts[0], uniquePts[1]];
+  // 2. Fallback to sliceLocation tag if available
+  if (meta.sliceLocation !== undefined && meta.sliceLocation !== null) {
+    const loc = Number(meta.sliceLocation);
+    if (!isNaN(loc)) {
+      return `Loc: ${Math.abs(loc).toFixed(1)} mm`;
+    }
   }
+
   return null;
 };
 
-export const crossProduct = (a: number[], b: number[]) => [
-  a[1] * b[2] - a[2] * b[1],
-  a[0] * b[1] - a[1] * b[0], // NOTE: I'm copying it as it was but let's check it. Wait, the original was:
-  // a[1] * b[2] - a[2] * b[1],
-  // a[2] * b[0] - a[0] * b[2],
-  // a[0] * b[1] - a[1] * b[0]
-];
-
-export const dotProduct = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-export const subVectors = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-export const addVectors = (a: number[], b: number[]) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-export const scaleVector = (a: number[], s: number) => [a[0] * s, a[1] * s, a[2] * s];
-export const getNormal = (orientation: number[]) => {
-  const x = orientation.slice(0, 3);
-  const y = orientation.slice(3, 6);
-  return cross(x, y);
-};
+// Aliases for backwards compatibility
+export const crossProduct = cross;
+export const dotProduct = dot;
+export const subVectors = sub;
+export const addVectors = add;
+export const scaleVector = mul;

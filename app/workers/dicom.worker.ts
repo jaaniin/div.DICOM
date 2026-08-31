@@ -7,6 +7,24 @@ const ctx: Worker = self as any;
 ctx.addEventListener('message', (e: MessageEvent) => {
   const { buffer, fileId, fileName } = e.data;
 
+  // Immediate guard against null/truncated buffer or obvious metadata files
+  if (!buffer || buffer.byteLength < 132 || (fileName && (
+      fileName.includes('Zone.Identifier') ||
+      fileName.startsWith('.') ||
+      fileName.startsWith('._') ||
+      fileName === 'Thumbs.db' ||
+      fileName === 'desktop.ini'
+  ))) {
+    ctx.postMessage({
+      success: true,
+      isImage: false,
+      fileId,
+      fileName,
+      buffer
+    }, [buffer]);
+    return;
+  }
+
   try {
     // dicomParser expects a Uint8Array
     const byteArray = new Uint8Array(buffer);
@@ -25,11 +43,16 @@ ctx.addEventListener('message', (e: MessageEvent) => {
     }
 
     // Extract relevant DICOM tags using dicom-parser
-    // 0010,0010 - Patient Name
-    // ...
     const parseFloatArray = (str: string | undefined) => {
         if (!str) return null;
-        return str.split('\\').map(parseFloat);
+        const arr = str.split('\\').map((v) => parseFloat(v.trim())).filter((v) => !isNaN(v));
+        return arr.length > 0 ? arr : null;
+    };
+
+    const parseNullableFloat = (str: string | undefined) => {
+        if (!str) return null;
+        const v = parseFloat(str.trim());
+        return isNaN(v) ? null : v;
     };
 
     const rawTags: Array<{ tag: string, name: string, value: string }> = [];
@@ -82,6 +105,7 @@ ctx.addEventListener('message', (e: MessageEvent) => {
       imagePositionPatient: parseFloatArray(dataSet.string('x00200032')),
       imageOrientationPatient: parseFloatArray(dataSet.string('x00200037')),
       pixelSpacing: parseFloatArray(dataSet.string('x00280030')),
+      sliceLocation: parseNullableFloat(dataSet.string('x00201041')),
       rows: dataSet.uint16('x00280010'),
       columns: dataSet.uint16('x00280011'),
       
@@ -106,6 +130,7 @@ ctx.addEventListener('message', (e: MessageEvent) => {
     // Transfer the ArrayBuffer BACK to the main thread (zero-copy)
     ctx.postMessage({ 
       success: true, 
+      isImage: true,
       fileId, 
       fileName, 
       metadata, 
@@ -113,12 +138,19 @@ ctx.addEventListener('message', (e: MessageEvent) => {
     }, [buffer]);
 
   } catch (error) {
+    const errorStr = String(error);
+    const isNonDicom = errorStr.includes('DICM prefix not found') || 
+                       errorStr.includes('read past end of buffer') || 
+                       errorStr.includes('invalid DICOM');
+
     // If parsing fails, still transfer the buffer back so it isn't lost
     ctx.postMessage({ 
       success: false, 
+      isImage: false,
+      isNonDicom,
       fileId, 
       fileName, 
-      error: String(error), 
+      error: errorStr, 
       buffer 
     }, [buffer]);
   }

@@ -1,1 +1,66 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --surface-bg: #0a0a0c;
+    --surface-panel: #121316;
+    --surface-card: #18191e;
+    --surface-card-hover: #22242b;
+    --surface-border: #2a2c35;
+    
+    --accent-primary: #3584F5;
+    --accent-primary-hover: #4b93f7;
+    --accent-glow: rgba(53, 132, 245, 0.25);
+    
+    --hud-emerald: #34d399;
+    --hud-cyan: #38bdf8;
+    --hud-amber: #fbbf24;
+    --hud-rose: #fb7185;
+  }
+
+  body {
+    background-color: var(--surface-bg);
+    color: #e2e8f0;
+    overflow: hidden;
+    user-select: none;
+  }
+}
+
+/* Custom sleek medical scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2c35;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f4250;
+}
+
+/* Modern Glassmorphic panel utility */
+.glass-panel {
+  background: rgba(18, 19, 22, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-dropdown {
+  background: rgba(22, 24, 29, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+}
+
+.hud-shadow {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
+}

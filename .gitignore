@@ -1,7 +1,39 @@
+# Dependencies
 node_modules/
+
+# Next.js build
 .next/
+out/
+tsconfig.tsbuildinfo
+
+# Coverage & testing
 coverage/
-.DS_Store
+
+# Logs & Environment
 *.log
 .env*
 !.env.example
+
+# OS & Editor Metadata
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+*.Zone.Identifier
+.antigravity/
+.system_generated/
+
+# DICOM Binary Safety Guards (Never commit clinical datasets)
+*.dcm
+*.dicom
+*.DCM
+*.DICOM
+samples/
+fixtures/
+
+# Internal Agent Workflows & Scratch Files
+PLAN.md
+AGENTS.md
+task.md
+walkthrough.md
+implementation_plan.md

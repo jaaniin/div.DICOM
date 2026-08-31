@@ -1,5 +1,10 @@
 export type Tool = 'wwc' | 'pan' | 'zoom' | 'length' | 'angle' | 'roi' | 'pixel' | 'none';
-export type Layout = 1 | 2 | 4;
+export type Layout = 1 | 2 | 4; // Legacy
+export type SplitDirection = 'horizontal' | 'vertical';
+export type LayoutNode = 
+  | { type: 'viewport', id: string, viewportIndex: number }
+  | { type: 'split', id: string, direction: SplitDirection, sizes?: number[], children: LayoutNode[] };
+
 export type Tab = 'reporting' | 'files';
 
 export type DICOMMetadata = {
@@ -23,6 +28,7 @@ export type DICOMMetadata = {
   pixelSpacing: number[] | null;
   rows: number | null;
   columns: number | null;
+  sliceLocation?: number | null;
   institutionName?: string;
   acquisitionDate?: string;
   acquisitionTime?: string;
