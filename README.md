@@ -135,3 +135,8 @@ This software is developed for **educational, research, and demonstration purpos
 ## 📄 License
 
 MIT License. See `LICENSE` for details.
+
+
+## Documentation
+- [UI Specification](UI_SPECIFICATION.md) — Comprehensive specification for viewport interactions, multi-selection, fast linking, focus mode scaling, and gestures.
+- [Architecture](ARCHITECTURE.md) — System architecture and design patterns.

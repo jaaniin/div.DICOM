@@ -89,7 +89,6 @@ export class DicomWorkerPool {
       const pumpQueue = () => {
         while (this.idleWorkers.length > 0 && queue.length > 0) {
           const worker = this.idleWorkers.pop()!;
-          const taskIndex = queue.length - 1;
           const task = queue.shift()!;
           const fileIndex = files.indexOf(task.file);
 

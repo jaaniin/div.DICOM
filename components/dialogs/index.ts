@@ -4,3 +4,4 @@ export { PatientMismatchDialog } from './PatientMismatchDialog';
 export { RemoveAllDialog } from './RemoveAllDialog';
 export { RawMetadataModal } from './RawMetadataModal';
 export { GlobalDropOverlay } from './GlobalDropOverlay';
+export * from './ParsingModal';

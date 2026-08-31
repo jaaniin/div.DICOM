@@ -12,12 +12,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.1",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cornerstone-core": "^2.6.1",
-    "cornerstone-tools": "^6.0.10",
     "cornerstone-wado-image-loader": "^4.13.2",
     "dicom-data-dictionary": "^0.3.1",
     "dicom-parser": "^1.8.21",
@@ -28,7 +26,8 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-resizable-panels": "^4.12.3",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "ts-morph": "^28.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.11",
@@ -40,7 +39,6 @@
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.8",
     "tailwindcss": "4.1.11",
-    "ts-morph": "^28.0.0",
     "tw-animate-css": "^1.4.0",
     "typescript": "5.9.3",
     "vitest": "^4.1.11"

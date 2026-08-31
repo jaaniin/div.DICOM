@@ -180,6 +180,23 @@ describe('Scout Plane Intersections (Cross-Referencing)', () => {
 
     expect(calculateIntersection(metaA, metaB)).toBeNull();
   });
+
+  it('returns null if metaA lacks pixelSpacing', () => {
+    const metaA = {
+      imagePositionPatient: [-100, -100, 0],
+      imageOrientationPatient: [1, 0, 0, 0, 1, 0],
+      rows: 200,
+      columns: 200,
+    };
+    const metaB = {
+      imagePositionPatient: [0, -100, 100],
+      imageOrientationPatient: [0, 1, 0, 0, 0, -1],
+      pixelSpacing: [1, 1],
+      rows: 200,
+      columns: 200,
+    };
+    expect(calculateIntersection(metaA, metaB)).toBeNull();
+  });
 });
 
 describe('Anatomical Slice Sorting (sortInstancesAnatomically)', () => {
@@ -225,6 +242,26 @@ describe('Anatomical Slice Sorting (sortInstancesAnatomically)', () => {
 
     const sorted = sortInstancesAnatomically(nonSpatial);
     expect(sorted.map((i) => i.id)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('excludes orthogonal scout slices from the primary sort stack', () => {
+    const axIop = [1, 0, 0, 0, 1, 0];
+    const sagIop = [0, 1, 0, 0, 0, -1];
+    
+    const mixedInstances = [
+      { id: 'Ax1', metadata: { imagePositionPatient: [0, 0, 10], imageOrientationPatient: axIop, instanceNumber: 1 } },
+      { id: 'Sag1', metadata: { imagePositionPatient: [0, 0, 0], imageOrientationPatient: sagIop, instanceNumber: 2 } }, // Orthogonal
+      { id: 'Ax2', metadata: { imagePositionPatient: [0, 0, -10], imageOrientationPatient: axIop, instanceNumber: 3 } },
+      { id: 'Ax3', metadata: { imagePositionPatient: [0, 0, 20], imageOrientationPatient: axIop, instanceNumber: 4 } },
+    ];
+
+    const sorted = sortInstancesAnatomically(mixedInstances);
+    const sortedIds = sorted.map((inst) => inst.id);
+    
+    // Axial normal is [0, 0, 1]. Projection is just Z coordinate.
+    // So Ax2 (-10) < Ax1 (10) < Ax3 (20)
+    // Sag1 should be appended at the end because it's orthogonal
+    expect(sortedIds).toEqual(['Ax2', 'Ax1', 'Ax3', 'Sag1']);
   });
 });
 

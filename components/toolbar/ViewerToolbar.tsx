@@ -29,6 +29,8 @@ interface ViewerToolbarProps {
   onApplyLayoutPreset: (preset: LayoutNode) => void;
   initialHangingProtocol: { layout: LayoutNode; viewports: ViewportState[] } | null;
   onRevertHangingProtocol: () => void;
+  selectedViewportsCount?: number;
+  onQuickLayout?: () => void;
   updateAvailable: { version: string; url: string } | null;
   onOpenHelp: () => void;
   onOpenDisclaimer: () => void;
@@ -54,6 +56,8 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   onApplyLayoutPreset,
   initialHangingProtocol,
   onRevertHangingProtocol,
+  selectedViewportsCount,
+  onQuickLayout,
   updateAvailable,
   onOpenHelp,
   onOpenDisclaimer,
@@ -113,6 +117,8 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           onApplyPreset={onApplyLayoutPreset}
           initialHangingProtocol={initialHangingProtocol}
           onRevertHangingProtocol={onRevertHangingProtocol}
+          selectedViewportsCount={selectedViewportsCount}
+          onQuickLayout={onQuickLayout}
         />
       </div>
 

@@ -91,3 +91,14 @@ This document records established architectural decisions for div.DICOM. Only de
 - **Consequences**:
   - Immediate reclamation of browser memory upon dataset removal.
   - Prevents progressive memory leaks during long-running clinical review sessions.
+
+### ADR-011: Viewport Interaction, Multi-Selection, Fast Linking & Relative Scaling
+- **Context**: Radiologists need fast multi-viewport comparison, synchronous zoom/pan/wwc, focus magnification without losing lesion context, and persistent split layout ratios.
+- **Decision**:
+  1. Implemented Ctrl+Click multi-selection (1-4 viewports) with Fast Linking of Zoom, Pan, and WW/WL.
+  2. Implemented Quick Windowing (Enter or Grid button) preserving source series' VOI and relative transforms.
+  3. Implemented relative viewport scaling (`zoomRatio = scale / fitScale`) preserving full screen fit and magnification across maximize/focus transitions.
+  4. Implemented persistent split layout ratios using `PanelSizes` object structure passed via `defaultLayout`.
+  5. Implemented isolated Chord Zoom (`buttons === 3`) avoiding WW/WL modification.
+  6. Documented full UI interaction rules in `UI_SPECIFICATION.md` and `.agents/rules/25-ui-interaction-specs.md`.
+- **Status**: Accepted

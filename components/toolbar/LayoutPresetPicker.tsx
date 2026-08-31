@@ -107,6 +107,8 @@ interface LayoutPresetPickerProps {
   onApplyPreset: (preset: LayoutNode) => void;
   initialHangingProtocol: { layout: LayoutNode; viewports: ViewportState[] } | null;
   onRevertHangingProtocol: () => void;
+  selectedViewportsCount?: number;
+  onQuickLayout?: () => void;
 }
 
 export const LayoutPresetPicker: React.FC<LayoutPresetPickerProps> = ({
@@ -115,24 +117,40 @@ export const LayoutPresetPicker: React.FC<LayoutPresetPickerProps> = ({
   onApplyPreset,
   initialHangingProtocol,
   onRevertHangingProtocol,
+  selectedViewportsCount = 0,
+  onQuickLayout,
 }) => {
+  const isQuickActive = selectedViewportsCount >= 1 && selectedViewportsCount <= 4;
+
   return (
     <div className="flex items-center gap-1">
-      {/* Preset Dropdown */}
+      {/* Preset Dropdown / Quick Layout Button */}
       <div className="relative">
         <button
-          onClick={onToggleMenu}
-          className={`p-2 rounded-md transition-colors flex items-center gap-1.5 text-xs font-medium ${
-            isMenuOpen
+          id="layout-picker-btn"
+          onClick={isQuickActive ? onQuickLayout : onToggleMenu}
+          className={`p-2 rounded-md transition-all duration-200 flex items-center gap-1.5 text-xs font-medium relative ${
+            isQuickActive
+              ? 'bg-[#3584F5] text-white ring-2 ring-blue-400 shadow-lg shadow-[#3584F5]/40 animate-pulse scale-105'
+              : isMenuOpen
               ? 'bg-[#3584F5] text-white shadow-md shadow-[#3584F5]/30'
               : 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
           }`}
-          title="Grid Layout Presets"
+          title={
+            isQuickActive
+              ? `Apply Quick Layout (${selectedViewportsCount} viewport${selectedViewportsCount > 1 ? 's' : ''} selected - Press Enter)`
+              : 'Grid Layout Presets'
+          }
         >
           <LayoutGrid className="w-5 h-5" />
+          {isQuickActive && (
+            <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-white text-[#3584F5] rounded-full text-[10px] font-black shadow-md border border-blue-500">
+              {selectedViewportsCount}
+            </span>
+          )}
         </button>
 
-        {isMenuOpen && (
+        {!isQuickActive && isMenuOpen && (
           <div className="absolute top-full left-0 mt-2 bg-neutral-800 border border-neutral-700/80 p-2 rounded-lg shadow-2xl w-44 z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-1">
             <div className="px-2 py-1 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-neutral-700/60 mb-1">
               Grid Layouts

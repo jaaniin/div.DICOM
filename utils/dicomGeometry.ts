@@ -109,6 +109,7 @@ export const calculateIntersection = (
     !metaA.imageOrientationPatient ||
     !metaB.imagePositionPatient ||
     !metaB.imageOrientationPatient ||
+    !metaA.pixelSpacing ||
     !metaB.pixelSpacing ||
     !metaB.rows ||
     !metaB.columns
@@ -222,47 +223,50 @@ export const sortInstancesAnatomically = <
     });
   }
 
-  const normal = getNormal(refInstance.metadata.imageOrientationPatient);
+  const refIOP = refInstance.metadata.imageOrientationPatient;
+  const normal = getNormal(refIOP);
+  const refRow = [refIOP[0], refIOP[1], refIOP[2]];
+  const refCol = [refIOP[3], refIOP[4], refIOP[5]];
 
-  return [...instances].sort((a, b) => {
+  const validInstances = instances.filter((inst) => {
+    if (!inst.metadata.imageOrientationPatient) return true;
+    const iop = inst.metadata.imageOrientationPatient;
+    if (iop.length < 6 || isNaN(iop[0])) return true;
+    const row = [iop[0], iop[1], iop[2]];
+    const col = [iop[3], iop[4], iop[5]];
+    return Math.abs(dot(refRow, row)) > 0.99 && Math.abs(dot(refCol, col)) > 0.99;
+  });
+
+  const excludedInstances = instances.filter((inst) => !validInstances.includes(inst));
+
+  const sortedValid = [...validInstances].sort((a, b) => {
     const posA = a.metadata.imagePositionPatient;
     const posB = b.metadata.imagePositionPatient;
 
     if (
-      posA &&
-      posB &&
-      posA.length >= 3 &&
-      posB.length >= 3 &&
-      !isNaN(posA[0]) &&
-      !isNaN(posA[1]) &&
-      !isNaN(posA[2]) &&
-      !isNaN(posB[0]) &&
-      !isNaN(posB[1]) &&
-      !isNaN(posB[2])
+      posA && posB && posA.length >= 3 && posB.length >= 3 &&
+      !isNaN(posA[0]) && !isNaN(posA[1]) && !isNaN(posA[2]) &&
+      !isNaN(posB[0]) && !isNaN(posB[1]) && !isNaN(posB[2])
     ) {
       const projA = dot([posA[0], posA[1], posA[2]], normal);
       const projB = dot([posB[0], posB[1], posB[2]], normal);
       const diff = projA - projB;
-      if (Math.abs(diff) > 1e-4) {
-        return diff;
-      }
+      if (Math.abs(diff) > 1e-4) return diff;
     }
 
-    // Fallback to sliceLocation
     if (a.metadata.sliceLocation !== undefined && a.metadata.sliceLocation !== null &&
         b.metadata.sliceLocation !== undefined && b.metadata.sliceLocation !== null) {
       const locA = Number(a.metadata.sliceLocation);
       const locB = Number(b.metadata.sliceLocation);
-      if (!isNaN(locA) && !isNaN(locB) && Math.abs(locA - locB) > 1e-4) {
-        return locA - locB;
-      }
+      if (!isNaN(locA) && !isNaN(locB) && Math.abs(locA - locB) > 1e-4) return locA - locB;
     }
 
-    // Secondary fallback to instanceNumber for duplicate/multi-phase positions
     const numA = a.metadata.instanceNumber ?? 0;
     const numB = b.metadata.instanceNumber ?? 0;
     return numA - numB;
   });
+
+  return [...sortedValid, ...excludedInstances];
 };
 
 
