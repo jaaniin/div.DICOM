@@ -29,6 +29,7 @@ import { generateReportText, generateReportFilename, downloadReportFile } from '
 import { getDicomWorkerPool } from '../utils/workerPool';
 import { initCornerstone } from '../utils/cornerstoneInit';
 import { isSystemOrMetadataFile, traverseFileTree } from '../utils/dicomFiles';
+import { uploadDicomFilesToBrowser } from '../utils/dicomUploader';
 import { getVisibleViewportIndices, splitViewportNode, closeViewportNode, determineHangingProtocol, canSplitNode, MAX_VIEWPORTS, createDefaultViewports, createQuickLayout } from '../utils/layoutHelpers';
 import {
   findClosestParallelSliceIndex,
@@ -2325,18 +2326,117 @@ export default function App() {
         }
       }
       const fileArrays = await Promise.all(filePromises);
-      handleFiles(fileArrays.flat(), isReplace);
+      const allFiles = fileArrays.flat();
+      handleFiles(allFiles, isReplace);
+      // Index into Study Browser SQLite DB asynchronously in background
+      uploadDicomFilesToBrowser(allFiles).catch((err) => {
+        console.warn('Background study browser sync error:', err);
+      });
     } else if (dataTransfer.files && dataTransfer.files.length > 0) {
-      handleFiles(Array.from(dataTransfer.files), isReplace);
+      const allFiles = Array.from(dataTransfer.files);
+      handleFiles(allFiles, isReplace);
+      // Index into Study Browser SQLite DB asynchronously in background
+      uploadDicomFilesToBrowser(allFiles).catch((err) => {
+        console.warn('Background study browser sync error:', err);
+      });
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      handleFiles(Array.from(e.target.files));
+      const allFiles = Array.from(e.target.files);
+      handleFiles(allFiles);
+      uploadDicomFilesToBrowser(allFiles).catch((err) => {
+        console.warn('Background study browser sync error:', err);
+      });
       e.target.value = '';
     }
   };
+
+  // Auto-load study or series from Study Browser via URL query params
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const seriesUids = urlParams.get('seriesUids') || urlParams.get('series');
+    const studyUids = urlParams.get('studyUids') || urlParams.get('studies');
+    const studyUid = urlParams.get('studyUid');
+    const seriesUid = urlParams.get('seriesUid');
+
+    if (!seriesUids && !studyUids && !studyUid && !seriesUid) return;
+
+    const loadFromBrowser = async () => {
+      try {
+        setIsParsing(true);
+        let endpoint = '';
+        if (seriesUids || studyUids) {
+          const params = new URLSearchParams();
+          if (seriesUids) params.set('seriesUids', seriesUids);
+          if (studyUids) params.set('studyUids', studyUids);
+          endpoint = `/api/browser/instances?${params.toString()}`;
+        } else if (studyUid) {
+          endpoint = `/api/browser/study/${encodeURIComponent(studyUid)}`;
+        } else if (seriesUid) {
+          endpoint = `/api/browser/series/${encodeURIComponent(seriesUid)}`;
+        }
+
+        const res = await fetch(endpoint);
+        if (!res.ok) throw new Error('Failed to fetch instances from browser API');
+        const data = await res.json();
+        const instances: Array<{ filePath: string; sopInstanceUid: string }> = data.instances || [];
+
+        if (instances.length === 0) return;
+
+        setParseProgress({ processed: 0, total: instances.length });
+
+        const filePromises = instances.map(async (inst, idx) => {
+          try {
+            const fileRes = await fetch(`/api/browser/file?path=${encodeURIComponent(inst.filePath)}`);
+            if (!fileRes.ok) {
+              console.warn(`Could not load DICOM file at ${inst.filePath} (status ${fileRes.status})`);
+              return null;
+            }
+            const blob = await fileRes.blob();
+            const fileName = inst.filePath.split('/').pop() || `${inst.sopInstanceUid}.dcm`;
+            setParseProgress((prev) => ({ processed: idx + 1, total: instances.length }));
+            return new File([blob], fileName, { type: 'application/dicom' });
+          } catch (fileErr) {
+            console.warn(`Failed to load file ${inst.filePath}:`, fileErr);
+            return null;
+          }
+        });
+
+        const filesRaw = await Promise.all(filePromises);
+        const files = filesRaw.filter((f): f is File => f !== null);
+
+        if (files.length === 0) {
+          console.warn('No readable DICOM files found.');
+          return;
+        }
+
+        await handleFiles(files, true);
+
+        // If a specific series was requested in single-study mode, ensure viewport 0 is focused on that series
+        if (studyUid && seriesUid) {
+          setViewports((prev) => {
+            const next = [...prev];
+            next[0] = {
+              studyInstanceUID: studyUid,
+              seriesInstanceUID: seriesUid,
+              imageIndex: 0,
+            };
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load study/series from browser:', err);
+      } finally {
+        setIsParsing(false);
+      }
+    };
+
+    loadFromBrowser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Series and Study Deletion with Explicit Cache Purging
   const handleRemoveSeries = (e: React.MouseEvent, studyUID: string, seriesUID: string) => {

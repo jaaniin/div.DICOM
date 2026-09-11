@@ -24,6 +24,7 @@ desktop.ini
 .system_generated/
 
 # DICOM Binary Safety Guards (Never commit clinical datasets)
+data/
 *.dcm
 *.dicom
 *.DCM

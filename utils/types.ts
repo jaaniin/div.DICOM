@@ -151,3 +151,64 @@ export type DicomAppState = {
   isDragging: boolean;
   setIsDragging: React.Dispatch<React.SetStateAction<boolean>>;
 };
+
+export interface StudyFilters {
+  modality?: string;
+  orientation?: string;
+  search?: string;
+  minSlices?: number;
+  startDate?: string;
+  endDate?: string;
+  sortBy?: 'studyDate' | 'patientName' | 'patientId' | 'seriesCount';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface BrowserSeriesInstance {
+  sopInstanceUid: string;
+  instanceNumber: number | null;
+  sliceLocation: number | null;
+  filePath: string;
+}
+
+export interface BrowserSeriesItem {
+  seriesInstanceUid: string;
+  seriesDescription: string;
+  modality: string;
+  seriesNumber: number | null;
+  calculatedOrientation: string;
+  sliceThickness: number | null;
+  rows: number | null;
+  columns: number | null;
+  instanceCount: number;
+  previewFilePath?: string;
+  previewSopUid?: string;
+}
+
+export interface BrowserStudyItem {
+  studyInstanceUid: string;
+  patientName: string;
+  patientId: string;
+  patientBirthDate?: string;
+  studyDate: string;
+  studyTime?: string;
+  studyDescription: string;
+  accessionNumber?: string;
+  modalities?: string[];
+  seriesCount: number;
+  totalInstances: number;
+  series: BrowserSeriesItem[];
+}
+
+export interface FacetCount {
+  name: string;
+  count: number;
+}
+
+export interface BrowserFacets {
+  modalities: FacetCount[];
+  orientations: FacetCount[];
+  totalStudies: number;
+  totalSeries: number;
+  totalInstances: number;
+}
+

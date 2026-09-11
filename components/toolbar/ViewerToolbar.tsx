@@ -1,10 +1,12 @@
 import React from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
   HelpCircle,
   PanelRightClose,
   PanelRightOpen,
   Download,
+  FolderKanban,
 } from 'lucide-react';
 import { Tool, LayoutNode, ViewportState, LengthMeasurement, DICOMStudy } from '../../utils/types';
 import { ToolButtonGroup } from './ToolButtonGroup';
@@ -76,6 +78,17 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             <span className="text-neutral-500 font-mono tracking-tighter ml-0.5 text-base">&nbsp;/&gt;</span>
           </span>
         </div>
+
+        <div className="h-4 w-px bg-neutral-800" />
+
+        <Link
+          href="/browser"
+          className="px-2.5 py-1 rounded text-xs font-semibold text-neutral-300 hover:text-cyan-400 bg-neutral-950/60 hover:bg-neutral-900 border border-neutral-800 hover:border-cyan-800/40 flex items-center gap-1.5 transition-colors shadow-sm"
+          title="Avaa tutkimusselain"
+        >
+          <FolderKanban className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Tutkimusselain</span>
+        </Link>
 
         {updateAvailable && (
           <a

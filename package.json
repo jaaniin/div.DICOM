@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "autoprefixer": "^10.4.21",
+    "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cornerstone-core": "^2.6.1",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.11",
     "@tailwindcss/typography": "^0.5.19",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/cornerstone-core": "^2.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
