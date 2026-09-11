@@ -2375,7 +2375,7 @@ export default function App() {
         .map((study) => {
           if (study.studyInstanceUID === studyUID) {
             const nextSeries = study.series.filter((s) => s.seriesInstanceUID !== seriesUID);
-            return nextSeries.length > 0 ? { ...study, series: nextSeries } : null;
+            return { ...study, series: nextSeries };
           }
           return study;
         })
