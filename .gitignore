@@ -1,18 +1,72 @@
 # Dependencies
 node_modules/
+.pnp
+.pnp.js
 
-# Next.js build
+# Next.js build & Cache
 .next/
 out/
+build/
+dist/
 tsconfig.tsbuildinfo
+.cache/
+.turbo/
 
-# Coverage & testing
+# Coverage & Testing
 coverage/
+.nyc_output/
 
-# Logs & Environment
+# Logs & Debug Dumps
 *.log
-.env*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment Variables & Secrets (CRITICAL)
+.env
+.env.*
 !.env.example
+*.env
+*.env.*
+*.secret
+*.secrets
+secrets/
+credentials/
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+*.p12
+*.id_rsa
+id_rsa*
+
+# SQLite Database & Storage (Never commit local database)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+
+# DICOM & Clinical Data Safety Guards (PHI / Patient health info)
+*.dcm
+*.dicom
+*.DCM
+*.DICOM
+*.ima
+*.IMA
+*.anon
+dicom/
+DICOM/
+samples/
+fixtures/
+test-data/
+__READ_ONLY__/
 
 # OS & Editor Metadata
 .DS_Store
@@ -20,21 +74,23 @@ coverage/
 Thumbs.db
 desktop.ini
 *.Zone.Identifier
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# AI / Agent Workflows & Brain Files
 .antigravity/
 .system_generated/
-
-# DICOM Binary Safety Guards (Never commit clinical datasets)
-data/
-*.dcm
-*.dicom
-*.DCM
-*.DICOM
-samples/
-fixtures/
-
-# Internal Agent Workflows & Scratch Files
+.gemini/
+.claude/
+.cursor/
+brain/
 PLAN.md
 AGENTS.md
 task.md
 walkthrough.md
 implementation_plan.md
+
