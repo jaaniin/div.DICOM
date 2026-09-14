@@ -1,4 +1,4 @@
-export type Tool = 'wwc' | 'pan' | 'zoom' | 'length' | 'angle' | 'roi' | 'pixel' | 'none';
+export type Tool = 'paging' | 'wwc' | 'pan' | 'zoom' | 'rotate' | 'length' | 'angle' | 'roi' | 'pixel' | 'none';
 export type Layout = 1 | 2 | 4; // Legacy
 export type SplitDirection = 'horizontal' | 'vertical';
 export type LayoutNode = 

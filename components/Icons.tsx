@@ -1,5 +1,26 @@
 import React from 'react';
 
+export const FastPagingIcon = ({ className = "w-5 h-5", ...props }: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    {/* Stacked DICOM slices on left */}
+    <rect x="2.5" y="4" width="13" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.7" />
+    <rect x="2.5" y="10.25" width="13" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.7" />
+    <rect x="2.5" y="16.5" width="13" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.7" />
+    {/* Vertical double chevron / fast paging browse arrows on right */}
+    <path d="M 18.5 7.5 L 21 5 L 23.5 7.5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    <line x1="21" y1="5.5" x2="21" y2="18.5" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M 18.5 16.5 L 21 19 L 23.5 16.5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export const AngleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     {...props}

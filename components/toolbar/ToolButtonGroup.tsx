@@ -3,11 +3,12 @@ import {
   SunMedium,
   Move,
   Search,
+  RotateCw,
   Ruler,
   Crosshair,
 } from 'lucide-react';
 import { Tool } from '../../utils/types';
-import { AngleIcon, RoiIcon } from '../Icons';
+import { FastPagingIcon, AngleIcon, RoiIcon } from '../Icons';
 
 export interface ToolDef {
   id: Tool;
@@ -18,12 +19,14 @@ export interface ToolDef {
 }
 
 export const TOOLS: ToolDef[] = [
+  { id: 'paging', icon: FastPagingIcon, label: 'Fast Paging', shortcut: 'B • Left Drag', hotkey: 'B' },
   { id: 'wwc', icon: SunMedium, label: 'Window/Level (WW/WL)', shortcut: 'W • Right Drag', hotkey: 'W' },
   { id: 'pan', icon: Move, label: 'Pan', shortcut: 'P • Middle Drag', hotkey: 'P' },
   { id: 'zoom', icon: Search, label: 'Zoom', shortcut: 'Z • Left+Right Drag', hotkey: 'Z' },
+  { id: 'rotate', icon: RotateCw, label: 'Rotate 2D', shortcut: 'R • Drag (Shift snap)', hotkey: 'R' },
   { id: 'length', icon: Ruler, label: 'Distance', shortcut: 'L', hotkey: 'L' },
   { id: 'angle', icon: AngleIcon, label: 'Angle', shortcut: 'A', hotkey: 'A' },
-  { id: 'roi', icon: RoiIcon, label: 'ROI (Polygon)', shortcut: 'R', hotkey: 'R' },
+  { id: 'roi', icon: RoiIcon, label: 'ROI (Polygon)', shortcut: 'O', hotkey: 'O' },
   { id: 'pixel', icon: Crosshair, label: 'Pixel Probe', shortcut: 'D', hotkey: 'D' },
 ];
 

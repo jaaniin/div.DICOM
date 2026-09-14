@@ -109,6 +109,12 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               <div className="font-medium text-white">Zoom In / Out</div>
 
               <div className="text-neutral-400 flex items-center gap-2">
+                <kbd className="px-1.5 py-0.5 bg-neutral-800 rounded font-mono text-white text-xs border border-neutral-700">R</kbd>
+                Rotate 2D
+              </div>
+              <div className="font-medium text-white">Rotate in 2D (Shift to snap)</div>
+
+              <div className="text-neutral-400 flex items-center gap-2">
                 <kbd className="px-1.5 py-0.5 bg-neutral-800 rounded font-mono text-white text-xs border border-neutral-700">L</kbd>
                 Distance
               </div>
@@ -121,7 +127,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               <div className="font-medium text-white">3-Point Angle (°)</div>
 
               <div className="text-neutral-400 flex items-center gap-2">
-                <kbd className="px-1.5 py-0.5 bg-neutral-800 rounded font-mono text-white text-xs border border-neutral-700">R</kbd>
+                <kbd className="px-1.5 py-0.5 bg-neutral-800 rounded font-mono text-white text-xs border border-neutral-700">O</kbd>
                 ROI (Polygon)
               </div>
               <div className="font-medium text-white">Area & Mean HU/Density</div>

@@ -36,6 +36,9 @@ import {
   pixelToPatient3D,
   patient3DToPixel,
   findClosestSliceTo3DPoint,
+  createViewportSyncAnchor,
+  calculateLinkedSliceIndex,
+  LinkedSyncAnchor,
 } from '../utils/syncScroll';
 import { calculateMeasurementLengthText, calculateRoiStatistics } from '../utils/measurements';
 
@@ -91,7 +94,7 @@ export default function App() {
   }>({ show: false, pendingInstances: [] });
 
   // Tool & Layout State
-  const [activeTool, setActiveTool] = useState<Tool>('none');
+  const [activeTool, setActiveTool] = useState<Tool>('paging');
   const [layoutTree, setLayoutTree] = useState<LayoutNode>({ type: 'viewport', id: 'root', viewportIndex: 0 });
   const [initialHangingProtocol, setInitialHangingProtocol] = useState<{
     layout: LayoutNode;
@@ -129,6 +132,38 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [showGlobalOverlay, setShowGlobalOverlay] = useState(false);
   const [overlayHoverZone, setOverlayHoverZone] = useState<'none' | 'left' | 'right' | 'single'>('none');
+
+  // Linked Viewport DICOM Coordinate Sync Anchors
+  const syncAnchorsRef = useRef<Map<number, LinkedSyncAnchor>>(new Map());
+  useEffect(() => {
+    if (selectedViewports.length >= 2) {
+      const existing = syncAnchorsRef.current;
+      const allValid = selectedViewports.every((idx) => {
+        const vp = viewports[idx];
+        const anc = existing.get(idx);
+        return anc && vp?.seriesInstanceUID && anc.seriesInstanceUID === vp.seriesInstanceUID;
+      });
+
+      if (!allValid || existing.size !== selectedViewports.length) {
+        const newAnchors = new Map<number, LinkedSyncAnchor>();
+        selectedViewports.forEach((idx) => {
+          const vp = viewports[idx];
+          if (!vp?.seriesInstanceUID) return;
+          const study = studies.find((s) => s.studyInstanceUID === vp.studyInstanceUID);
+          const series = study?.series.find((s) => s.seriesInstanceUID === vp.seriesInstanceUID);
+          if (!series || !series.instances || series.instances.length === 0) return;
+
+          const anchor = createViewportSyncAnchor(series, vp.imageIndex);
+          if (anchor) {
+            newAnchors.set(idx, anchor);
+          }
+        });
+        syncAnchorsRef.current = newAnchors;
+      }
+    } else {
+      syncAnchorsRef.current.clear();
+    }
+  }, [selectedViewports, viewports, studies]);
 
   // Measurements State & Ref
   const [measurements, setMeasurements] = useState<LengthMeasurement[]>([]);
@@ -807,6 +842,39 @@ export default function App() {
       return;
     }
 
+    if (activeTool === 'rotate') {
+      const element = viewportRefs.current[index];
+      if (element) {
+        import('cornerstone-core').then((cs) => {
+          const cornerstone = cs.default || cs;
+          try {
+            const vp = cornerstone.getViewport(element);
+            if (vp) {
+              vp.rotation = 0;
+              cornerstone.setViewport(element, vp);
+              const enabled = cornerstone.getEnabledElement(element);
+              const fitScale = computeFitScale(element, enabled?.image);
+              const activeRatio = fitScale > 0 ? vp.scale / fitScale : 1.0;
+              savedViewportTransformsRef.current.set(index, {
+                zoomRatio: activeRatio,
+                translation: { ...vp.translation },
+                voi: { windowCenter: vp.voi.windowCenter, windowWidth: vp.voi.windowWidth },
+                rotation: 0,
+                hflip: vp.hflip,
+                vflip: vp.vflip,
+              });
+              drawMeasurements(element, index);
+              const hudEl = document.getElementById(`overlay-wl-zoom-${index}`);
+              if (hudEl) {
+                hudEl.innerText = `WL: ${Math.round(vp.voi.windowCenter)} WW: ${Math.round(vp.voi.windowWidth)} • Zoom: ${(activeRatio * 100).toFixed(0)}%`;
+              }
+            }
+          } catch (e) {}
+        });
+      }
+      return;
+    }
+
     toggleMaximize(index);
   };
 
@@ -882,7 +950,8 @@ export default function App() {
             const hudEl = document.getElementById(`overlay-wl-zoom-${index}`);
             if (hudEl && vp) {
               const activeRatio = fitScale > 0 ? vp.scale / fitScale : 1.0;
-              hudEl.innerText = `WL: ${Math.round(vp.voi.windowCenter)} WW: ${Math.round(vp.voi.windowWidth)} • Zoom: ${(activeRatio * 100).toFixed(0)}%`;
+              const rotPart = Math.round(vp.rotation || 0) !== 0 ? ` • Rot: ${Math.round(vp.rotation)}°` : '';
+              hudEl.innerText = `WL: ${Math.round(vp.voi.windowCenter)} WW: ${Math.round(vp.voi.windowWidth)} • Zoom: ${(activeRatio * 100).toFixed(0)}%${rotPart}`;
             }
           } catch (e) {}
         })
@@ -900,6 +969,16 @@ export default function App() {
     if (!series || !series.instances[newImageIndex]) return;
 
     const sourceInstance = series.instances[newImageIndex];
+    const isSourceLinked = selectedViewports.includes(sourceViewportIndex) && selectedViewports.length > 1;
+
+    let sourceAnchor = isSourceLinked ? syncAnchorsRef.current.get(sourceViewportIndex) : undefined;
+    if (isSourceLinked && !sourceAnchor) {
+      sourceAnchor = createViewportSyncAnchor(series, vp.imageIndex) || undefined;
+      if (sourceAnchor) {
+        syncAnchorsRef.current.set(sourceViewportIndex, sourceAnchor);
+      }
+    }
+
     const updates: { vpIdx: number; newIdx: number; instance: DICOMInstance }[] = [
       { vpIdx: sourceViewportIndex, newIdx: newImageIndex, instance: sourceInstance },
     ];
@@ -910,9 +989,34 @@ export default function App() {
       const otherSeries = otherStudy?.series.find((s) => s.seriesInstanceUID === otherVp.seriesInstanceUID);
       if (!otherSeries || otherSeries.instances.length === 0) return;
 
-      const matchIdx = findClosestParallelSliceIndex(sourceInstance, otherSeries.instances);
-      if (matchIdx !== -1 && matchIdx !== otherVp.imageIndex) {
-        updates.push({ vpIdx: i, newIdx: matchIdx, instance: otherSeries.instances[matchIdx] });
+      if (isSourceLinked && selectedViewports.includes(i)) {
+        // Linked mode: Anatomical DICOM coordinate sync with anchor recovery
+        let targetAnchor = syncAnchorsRef.current.get(i);
+        if (!targetAnchor) {
+          targetAnchor = createViewportSyncAnchor(otherSeries, otherVp.imageIndex) || undefined;
+          if (targetAnchor) {
+            syncAnchorsRef.current.set(i, targetAnchor);
+          }
+        }
+
+        if (sourceAnchor && targetAnchor) {
+          const targetIdx = calculateLinkedSliceIndex(
+            sourceAnchor,
+            newImageIndex,
+            sourceInstance,
+            targetAnchor,
+            otherSeries.instances
+          );
+          if (targetIdx !== otherVp.imageIndex) {
+            updates.push({ vpIdx: i, newIdx: targetIdx, instance: otherSeries.instances[targetIdx] });
+          }
+        }
+      } else {
+        // Fallback to 3D spatial auto-sync for unselected viewports
+        const matchIdx = findClosestParallelSliceIndex(sourceInstance, otherSeries.instances);
+        if (matchIdx !== -1 && matchIdx !== otherVp.imageIndex) {
+          updates.push({ vpIdx: i, newIdx: matchIdx, instance: otherSeries.instances[matchIdx] });
+        }
       }
     });
 
@@ -928,7 +1032,7 @@ export default function App() {
       lastRenderedKeyRef.current[u.vpIdx] = `${u.instance.metadata.studyInstanceUID}_${u.instance.metadata.seriesInstanceUID}_${u.newIdx}`;
       renderViewportImage(u.vpIdx, u.instance, true);
     });
-  }, [viewports, studies, renderViewportImage]);
+  }, [viewports, studies, renderViewportImage, selectedViewports]);
 
   // Initialize Cornerstone & WADO Image Loader
   useEffect(() => {
@@ -1021,17 +1125,21 @@ export default function App() {
       }
 
       const key = e.key.toLowerCase();
-      if (key === 'w') {
+      if (key === 'b') {
+        handleSelectTool(activeTool === 'paging' ? 'none' : 'paging');
+      } else if (key === 'w') {
         handleSelectTool(activeTool === 'wwc' ? 'none' : 'wwc');
       } else if (key === 'p') {
         handleSelectTool(activeTool === 'pan' ? 'none' : 'pan');
       } else if (key === 'z') {
         handleSelectTool(activeTool === 'zoom' ? 'none' : 'zoom');
+      } else if (key === 'r') {
+        handleSelectTool(activeTool === 'rotate' ? 'none' : 'rotate');
       } else if (key === 'l') {
         handleSelectTool(activeTool === 'length' ? 'none' : 'length');
       } else if (key === 'a') {
         handleSelectTool(activeTool === 'angle' ? 'none' : 'angle');
-      } else if (key === 'r') {
+      } else if (key === 'o') {
         handleSelectTool(activeTool === 'roi' ? 'none' : 'roi');
       } else if (key === 'd') {
         handleSelectTool(activeTool === 'pixel' ? 'none' : 'pixel');
@@ -1431,6 +1539,11 @@ export default function App() {
       const initialWidth = vp.voi.windowWidth;
       const initialTranslation = { ...vp.translation };
       const initialScale = vp.scale;
+      const initialRotation = vp.rotation || 0;
+
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
 
       // Fast Linking / Syncing: Capture initial states of all other selected viewports
       const currentSelected = selectedViewportsRef.current;
@@ -1441,6 +1554,7 @@ export default function App() {
           scale: number;
           translation: { x: number; y: number };
           voi: { windowCenter: number; windowWidth: number };
+          rotation: number;
         };
       } = {};
 
@@ -1457,6 +1571,7 @@ export default function App() {
                     scale: oVp.scale,
                     translation: { ...oVp.translation },
                     voi: { windowCenter: oVp.voi.windowCenter, windowWidth: oVp.voi.windowWidth },
+                    rotation: oVp.rotation || 0,
                   };
                 }
               } catch (e) {}
@@ -1465,6 +1580,7 @@ export default function App() {
         });
       }
 
+      const startImageIndex = viewports[index]?.imageIndex ?? 0;
       let initialAction: string | null = null;
       let currentDraggingPoint: { id: string; point: string; isNew: boolean; lastPt?: any } | null = null;
 
@@ -1838,11 +1954,93 @@ export default function App() {
                 });
                 const lHud = document.getElementById(`overlay-wl-zoom-${linkedIdxStr}`);
                 if (lHud) {
-                  lHud.innerText = `WL: ${Math.round(lVp.voi.windowCenter)} WW: ${Math.round(lVp.voi.windowWidth)} • Zoom: ${(lRatio * 100).toFixed(0)}%`;
+                  const rotPart = Math.round(lVp.rotation || 0) !== 0 ? ` • Rot: ${Math.round(lVp.rotation)}°` : '';
+                  lHud.innerText = `WL: ${Math.round(lVp.voi.windowCenter)} WW: ${Math.round(lVp.voi.windowWidth)} • Zoom: ${(lRatio * 100).toFixed(0)}%${rotPart}`;
                 }
               }
             } catch (e) {}
           });
+        } else if (action === 'rotate') {
+          panningViewportIndexRef.current = null;
+          const currentAngle = Math.atan2(moveEvt.clientY - centerY, moveEvt.clientX - centerX) * (180 / Math.PI);
+          const angleDiff = currentAngle - startAngle;
+
+          let newRotation = (initialRotation + angleDiff) % 360;
+          if (newRotation < 0) newRotation += 360;
+
+          if (moveEvt.shiftKey) {
+            newRotation = Math.round(newRotation / 15) * 15;
+            if (newRotation >= 360) newRotation = 0;
+          }
+
+          vp.rotation = Math.round(newRotation);
+          cornerstone.setViewport(element, vp);
+
+          savedViewportTransformsRef.current.set(index, {
+            zoomRatio: currentZoomRatio,
+            translation: { ...vp.translation },
+            voi: { windowCenter: vp.voi.windowCenter, windowWidth: vp.voi.windowWidth },
+            rotation: vp.rotation,
+            hflip: vp.hflip,
+            vflip: vp.vflip,
+          });
+
+          // Sync rotation across linked viewports
+          Object.entries(initialLinkedStates).forEach(([linkedIdxStr, init]) => {
+            try {
+              const lIdx = parseInt(linkedIdxStr, 10);
+              const lVp = cornerstone.getViewport(init.element);
+              if (lVp) {
+                let lRotation = (init.rotation + angleDiff) % 360;
+                if (lRotation < 0) lRotation += 360;
+                if (moveEvt.shiftKey) {
+                  lRotation = Math.round(lRotation / 15) * 15;
+                  if (lRotation >= 360) lRotation = 0;
+                }
+                lVp.rotation = Math.round(lRotation);
+                cornerstone.setViewport(init.element, lVp);
+                const lEnabled = cornerstone.getEnabledElement(init.element);
+                const lFit = lEnabled ? computeFitScale(init.element, lEnabled.image) : 1.0;
+                const lRatio = lFit > 0 ? lVp.scale / lFit : 1.0;
+                savedViewportTransformsRef.current.set(lIdx, {
+                  zoomRatio: lRatio,
+                  translation: { ...lVp.translation },
+                  voi: { windowCenter: lVp.voi.windowCenter, windowWidth: lVp.voi.windowWidth },
+                  rotation: lVp.rotation,
+                  hflip: lVp.hflip,
+                  vflip: lVp.vflip,
+                });
+                drawMeasurements(init.element, lIdx);
+                const lHud = document.getElementById(`overlay-wl-zoom-${linkedIdxStr}`);
+                if (lHud) {
+                  const rotPart = Math.round(lVp.rotation || 0) !== 0 ? ` • Rot: ${Math.round(lVp.rotation)}°` : '';
+                  lHud.innerText = `WL: ${Math.round(lVp.voi.windowCenter)} WW: ${Math.round(lVp.voi.windowWidth)} • Zoom: ${(lRatio * 100).toFixed(0)}%${rotPart}`;
+                }
+              }
+            } catch (e) {}
+          });
+
+          drawMeasurements(element, index);
+          const hudEl = document.getElementById(`overlay-wl-zoom-${index}`);
+          if (hudEl) {
+            const rotPart = Math.round(vp.rotation || 0) !== 0 ? ` • Rot: ${Math.round(vp.rotation)}°` : '';
+            hudEl.innerText = `WL: ${Math.round(vp.voi.windowCenter)} WW: ${Math.round(vp.voi.windowWidth)} • Zoom: ${(currentZoomRatio * 100).toFixed(0)}%${rotPart}`;
+          }
+        } else if (action === 'paging') {
+          panningViewportIndexRef.current = null;
+          const vpState = viewports[index];
+          if (vpState?.seriesInstanceUID) {
+            const study = studies.find((s) => s.studyInstanceUID === vpState.studyInstanceUID);
+            const series = study?.series.find((s) => s.seriesInstanceUID === vpState.seriesInstanceUID);
+            if (series && series.instances.length > 1) {
+              const totalSlices = series.instances.length;
+              const sliceDelta = Math.trunc(deltaY / 6);
+              const targetIdx = Math.max(0, Math.min(totalSlices - 1, startImageIndex + sliceDelta));
+              if (targetIdx !== vpState.imageIndex) {
+                syncScrollToImage(index, targetIdx);
+              }
+            }
+          }
         } else if (action === 'pixel') {
           panningViewportIndexRef.current = null;
           updatePixelProbe(element, index, moveEvt.clientX, moveEvt.clientY);
@@ -1960,7 +2158,8 @@ export default function App() {
         const hudEl = document.getElementById(`overlay-wl-zoom-${index}`);
         if (hudEl) {
           const activeRatio = fitScale > 0 ? vp.scale / fitScale : 1.0;
-          hudEl.innerText = `WL: ${Math.round(vp.voi.windowCenter)} WW: ${Math.round(vp.voi.windowWidth)} • Zoom: ${(activeRatio * 100).toFixed(0)}%`;
+          const rotPart = Math.round(vp.rotation || 0) !== 0 ? ` • Rot: ${Math.round(vp.rotation)}°` : '';
+          hudEl.innerText = `WL: ${Math.round(vp.voi.windowCenter)} WW: ${Math.round(vp.voi.windowWidth)} • Zoom: ${(activeRatio * 100).toFixed(0)}%${rotPart}`;
         }
       };
 
@@ -2151,6 +2350,7 @@ export default function App() {
     });
 
     savedViewportTransformsRef.current.delete(viewportIndex);
+    syncAnchorsRef.current.delete(viewportIndex);
     if (series.instances[0]) {
       lastRenderedKeyRef.current[viewportIndex] = `${studyUID}_${seriesUID}_0`;
       renderViewportImage(viewportIndex, series.instances[0], false);
@@ -2669,7 +2869,21 @@ export default function App() {
               });
             }
           }}
-          className="absolute inset-0 z-0 bg-black touch-none cursor-default"
+          className={`absolute inset-0 z-0 bg-black touch-none ${
+            activeTool === 'paging'
+              ? 'cursor-ns-resize'
+              : activeTool === 'pan'
+              ? 'cursor-grab active:cursor-grabbing'
+              : activeTool === 'zoom'
+              ? 'cursor-zoom-in'
+              : activeTool === 'rotate'
+              ? 'cursor-grab active:cursor-grabbing'
+              : activeTool === 'wwc'
+              ? 'cursor-crosshair'
+              : activeTool === 'pixel'
+              ? 'cursor-crosshair'
+              : 'cursor-default'
+          }`}
           onContextMenu={(e) => e.preventDefault()}
           onPointerDown={(e) => handlePointerDown(e, index)}
           onPointerMove={(e) => handlePointerMove(e, index)}

@@ -150,3 +150,123 @@ export const findClosestSliceTo3DPoint = (
 
   return bestIndex;
 };
+
+export interface LinkedSyncAnchor {
+  seriesInstanceUID: string;
+  anchorIndex: number;
+  anchorPosAlongNormal: number | null;
+  normal: Vector3 | null;
+  slicePositions: number[] | null;
+}
+
+/**
+ * Creates or updates an anchor snapshot for synchronized scrolling across linked series.
+ */
+export const createViewportSyncAnchor = (
+  series: { seriesInstanceUID: string; instances: DICOMInstance[] },
+  currentImageIndex: number
+): LinkedSyncAnchor | null => {
+  if (!series || !series.instances || series.instances.length === 0) return null;
+  const clampedIndex = Math.max(0, Math.min(series.instances.length - 1, currentImageIndex));
+  const currentInst = series.instances[clampedIndex];
+  if (!currentInst) return null;
+
+  let normal: Vector3 | null = null;
+  let anchorPosAlongNormal: number | null = null;
+  let slicePositions: number[] | null = null;
+
+  const iop = currentInst.metadata?.imageOrientationPatient;
+  const ipp = currentInst.metadata?.imagePositionPatient;
+
+  if (iop && iop.length >= 6 && !isNaN(iop[0])) {
+    normal = getNormal(iop);
+    if (ipp && ipp.length >= 3 && !isNaN(ipp[0])) {
+      anchorPosAlongNormal = dot([ipp[0], ipp[1], ipp[2]], normal);
+
+      slicePositions = series.instances.map((inst) => {
+        const instIpp = inst.metadata?.imagePositionPatient;
+        if (instIpp && instIpp.length >= 3 && !isNaN(instIpp[0])) {
+          return dot([instIpp[0], instIpp[1], instIpp[2]], normal!);
+        }
+        return 0;
+      });
+    }
+  }
+
+  return {
+    seriesInstanceUID: series.seriesInstanceUID,
+    anchorIndex: clampedIndex,
+    anchorPosAlongNormal,
+    normal,
+    slicePositions,
+  };
+};
+
+/**
+ * Calculates the synchronized slice index for a target series based on the source series'
+ * new slice index and their established synchronization anchors.
+ * Preserves the exact anatomical/coordinate alignment in DICOM 3D patient space,
+ * including proper clamping and direction reversal recovery when stacks have unequal coverage.
+ */
+export const calculateLinkedSliceIndex = (
+  sourceAnchor: LinkedSyncAnchor,
+  sourceNewIndex: number,
+  sourceInstance: DICOMInstance,
+  targetAnchor: LinkedSyncAnchor,
+  targetInstances: DICOMInstance[]
+): number => {
+  if (targetInstances.length === 0) return 0;
+  const maxTargetIndex = targetInstances.length - 1;
+
+  // 1. Physical millimeter DICOM coordinate-space synchronization
+  if (
+    sourceAnchor.normal &&
+    sourceAnchor.anchorPosAlongNormal !== null &&
+    targetAnchor.normal &&
+    targetAnchor.anchorPosAlongNormal !== null &&
+    targetAnchor.slicePositions &&
+    targetAnchor.slicePositions.length === targetInstances.length &&
+    sourceInstance.metadata?.imagePositionPatient &&
+    sourceInstance.metadata.imagePositionPatient.length >= 3
+  ) {
+    const alignment = dot(sourceAnchor.normal, targetAnchor.normal);
+
+    // Parallel or anti-parallel slice planes
+    if (Math.abs(alignment) > 0.9) {
+      const dir = alignment > 0 ? 1 : -1;
+      const sourceIpp = sourceInstance.metadata.imagePositionPatient;
+      const sourceNewPos = dot([sourceIpp[0], sourceIpp[1], sourceIpp[2]], sourceAnchor.normal);
+      const sourceDeltaMm = sourceNewPos - sourceAnchor.anchorPosAlongNormal;
+      const targetDesiredPos = targetAnchor.anchorPosAlongNormal + sourceDeltaMm * dir;
+
+      const positions = targetAnchor.slicePositions;
+      const posFirst = positions[0];
+      const posLast = positions[positions.length - 1];
+      const minPos = Math.min(posFirst, posLast);
+      const maxPos = Math.max(posFirst, posLast);
+
+      if (targetDesiredPos >= maxPos) {
+        return posLast >= posFirst ? maxTargetIndex : 0;
+      }
+      if (targetDesiredPos <= minPos) {
+        return posFirst <= posLast ? 0 : maxTargetIndex;
+      }
+
+      let minDiff = Infinity;
+      let bestIdx = 0;
+      for (let k = 0; k < positions.length; k++) {
+        const diff = Math.abs(positions[k] - targetDesiredPos);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestIdx = k;
+        }
+      }
+      return bestIdx;
+    }
+  }
+
+  // 2. Fallback: Virtual slice index offset with bounds clamping that preserves alignment on reversal
+  const indexDelta = sourceNewIndex - sourceAnchor.anchorIndex;
+  const targetDesiredIndex = targetAnchor.anchorIndex + indexDelta;
+  return Math.max(0, Math.min(maxTargetIndex, targetDesiredIndex));
+};
